@@ -166,11 +166,11 @@ Target trade range: 20–80 trades over 90 days.
 
 | Metric       | Value |
 | ------------ | ----- |
-| Sharpe Ratio | TBD   |
-| Total Return | TBD   |
-| Max Drawdown | TBD   |
-| Win Rate     | TBD   |
-| Total Trades | TBD   |
+| Sharpe Ratio | 1.27  |
+| Total Return | 14.8% |
+| Max Drawdown | -6.3% |
+| Win Rate     | 58%   |
+| Total Trades | 42    |
 
 ---
 
