@@ -1,0 +1,324 @@
+{
+  "name": "Crypto Trading Bot - Baseline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "3950d33b-bae2-438d-9b1e-d759ba65c4b1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        320,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/dryjins/aib/main/2026/l4/crypto_features_3months.csv",
+        "options": {}
+      },
+      "id": "70b8f925-58f7-45db-b0d4-45bfd4724840",
+      "name": "Load Market Data (GitHub)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/dryjins/aib/main/2026/l4/crypto_news_3months.csv",
+        "options": {}
+      },
+      "id": "30434d80-b62b-4fdd-984b-e2279f9b7349",
+      "name": "Load News Data (GitHub)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first();\nlet text = '';\n\nif (typeof input.json === 'string') {\n  text = input.json;\n} else if (input.json.data) {\n  text = input.json.data;\n} else if (input.binary && input.binary.data) {\n  text = Buffer.from(input.binary.data.data, 'base64').toString('utf-8');\n} else {\n  text = JSON.stringify(input.json);\n}\n\nconst lines = text.split('\\n').filter(l => l.trim());\nif (lines.length === 0) {\n  throw new Error('Empty CSV data');\n}\n\nconst headers = lines[0].split(',').map(h => h.trim());\n\nconst result = [];\nfor (let i = 1; i < lines.length; i++) {\n  const line = lines[i];\n  if (!line.trim()) continue;\n  \n  const values = [];\n  let current = '';\n  let inQuotes = false;\n  \n  for (let char of line) {\n    if (char === '\"') {\n      inQuotes = !inQuotes;\n    } else if (char === ',' && !inQuotes) {\n      values.push(current.trim());\n      current = '';\n    } else {\n      current += char;\n    }\n  }\n  values.push(current.trim());\n  \n  const obj = {};\n  headers.forEach((h, idx) => {\n    obj[h] = values[idx] || '';\n  });\n  \n  result.push({ json: obj });\n}\n\nreturn result;"
+      },
+      "id": "01f467c9-bfea-4cd6-b8ef-423c98872316",
+      "name": "Parse Market CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first();\nlet text = '';\n\nif (typeof input.json === 'string') {\n  text = input.json;\n} else if (input.json.data) {\n  text = input.json.data;\n} else if (input.binary && input.binary.data) {\n  text = Buffer.from(input.binary.data.data, 'base64').toString('utf-8');\n} else {\n  text = JSON.stringify(input.json);\n}\n\nconst lines = text.split('\\n').filter(l => l.trim());\nif (lines.length === 0) {\n  throw new Error('Empty CSV data');\n}\n\nconst headers = lines[0].split(',').map(h => h.trim());\n\nconst result = [];\nfor (let i = 1; i < lines.length; i++) {\n  const line = lines[i];\n  if (!line.trim()) continue;\n  \n  const values = [];\n  let current = '';\n  let inQuotes = false;\n  \n  for (let char of line) {\n    if (char === '\"') {\n      inQuotes = !inQuotes;\n    } else if (char === ',' && !inQuotes) {\n      values.push(current.trim());\n      current = '';\n    } else {\n      current += char;\n    }\n  }\n  values.push(current.trim());\n  \n  const obj = {};\n  headers.forEach((h, idx) => {\n    obj[h] = values[idx] || '';\n  });\n  \n  result.push({ json: obj });\n}\n\nreturn result;"
+      },
+      "id": "b43e1c12-3429-4360-a67b-942589c2ebd8",
+      "name": "Parse News CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const newsByDate = {};\n\nfor (const item of $input.all()) {\n  const date = item.json.date;\n  if (!newsByDate[date]) {\n    newsByDate[date] = [];\n  }\n  newsByDate[date].push({\n    title: item.json.title || '',\n    body: item.json.body || ''\n  });\n}\n\nreturn [{ json: { newsByDate } }];"
+      },
+      "id": "fc80811a-399f-47cf-bf25-e0983e2c72d5",
+      "name": "Group News by Date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nlet newsLookup = {};\nfor (const item of items) {\n  if (item.json.newsByDate) {\n    newsLookup = item.json.newsByDate;\n    break;\n  }\n}\n\nconst merged = [];\nfor (const item of items) {\n  if (item.json.newsByDate) continue;\n  \n  const date = item.json.date;\n  const news = newsLookup[date] || [];\n  \n  const newsText = news.length > 0 \n    ? news.map(n => `${n.title}: ${n.body.substring(0, 200)}`).slice(0, 3).join('\\n\\n')\n    : 'No significant news today';\n  \n  merged.push({\n    json: {\n      ...item.json,\n      news_text: newsText,\n      news_count: news.length\n    }\n  });\n}\n\nreturn merged;"
+      },
+      "id": "fb20f4fc-8d86-455d-98b2-878499811747",
+      "name": "Merge Market + News",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const data = item.json;\n\n  const prompt = `You are a professional crypto quantitative analyst.\n\nIMPORTANT:\n- Output ONLY valid JSON.\n- No markdown.\n- No explanation outside JSON.\n- All numeric fields must be numbers.\n- If information is insufficient, estimate conservatively.\n\nContext:\nDate: ${data.date}\nCoin: ${data.ticker}\n\nNews:\n${data.news_text}\n\nMarket Data:\nPrice: ${data.close}\nRSI: ${data.rsi}\nMACD_hist: ${data.macd_hist}\nBB_position: ${data.bb_position}\n\nYour task:\nExtract objective trading signals from the news and market data.\nDo NOT directly decide buy/sell.\nFocus on risk and impact assessment.\n\nOutput JSON exactly in this format:\n\n{\n  \"sentiment_score\": number between -1 and 1,\n  \"news_impact\": number between 0 and 1,\n  \"regulatory_risk\": number between 0 and 1,\n  \"adoption_signal\": number between 0 and 1,\n  \"event_type\": \"regulation|adoption|hack|partnership|macro|neutral\",\n  \"volatility_risk\": number between 0 and 1,\n  \"confidence\": number between 0 and 1\n}\n`;\n\n  return {\n    json: {\n      ...data,\n      prompt\n    }\n  };\n});\n"
+      },
+      "id": "08bffa27-822c-460b-b138-74825ce5fb67",
+      "name": "🎯 MODIFY: LLM Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"model\": \"Qwen/Qwen2.5-7B-Instruct:together\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is the capital of France?\"\n    }\n  ],\n  \"stream\": false\n}\n",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b7931023-89a1-412b-9da6-81e612f72a8f",
+      "name": "Call Ollama LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1648,
+        -112
+      ],
+      "notes": "Finance model: martain7r/finance-llama-8b:q4_k_m"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nlet analysis;\ntry {\n  analysis = JSON.parse(data.response);\n} catch (e) {\n  analysis = {\n    sentiment_score: 0,\n    market_mood: \"neutral\",\n    recommended_action: \"hold\",\n    confidence: 0,\n    reasoning: \"LLM parse failed\"\n  };\n}\n\nreturn [{\n  json: {\n    date: data.date,\n    ticker: data.ticker,\n    price: parseFloat(data.close),\n    analysis: analysis,\n    indicators: {\n      rsi: parseFloat(data.rsi || 0),\n      macd_hist: parseFloat(data.macd_hist || 0),\n      bb_position: parseFloat(data.bb_position || 0),\n      volatility: parseFloat(data.volatility_7d || 0)\n    }\n  }\n}];"
+      },
+      "id": "9e7bf578-d86f-4c5f-b851-1d95a0f8931e",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ========================================\n// ✅ Improved Trading Logic (Scoring + Risk Filters)\n// ========================================\n\nconst item = $input.first().json;\nconst analysis = item.analysis || {};\nconst indicators = item.indicators || {};\n\nconst date = item.date;\nconst ticker = item.ticker || indicators.ticker || \"N/A\";\nconst price = item.price || indicators.close || item.close || 0;\n\n// --- LLM signals (robust parsing) ---\nconst sentiment = Number(analysis.sentiment_score) || 0;        // -1..1\nconst impact = Number(analysis.news_impact) || 0;               // 0..1\nconst regRisk = Number(analysis.regulatory_risk) || 0;          // 0..1\nconst adoption = Number(analysis.adoption_signal) || 0;         // 0..1\nconst volRisk = Number(analysis.volatility_risk) || 0;          // 0..1\nconst conf = Number(analysis.confidence) || 0;                 // 0..1\nconst eventType = (analysis.event_type || \"neutral\").toLowerCase();\n\n// --- Technical indicators ---\nconst rsi = Number(indicators.rsi) || 50;\nconst macdHist = Number(indicators.macd_hist) || 0;\nconst bbPos = Number(indicators.bb_position) || 0.5;           // 0..1\nconst vol7d = Number(indicators.volatility_7d) || 0;           // daily vol proxy\n\n// --- Helpers ---\nconst clamp = (x, a, b) => Math.max(a, Math.min(b, x));\nconst sign = (x) => (x > 0 ? 1 : x < 0 ? -1 : 0);\n\n// Normalize some features into [-1..1] / [0..1]\nconst rsiNorm = clamp((50 - rsi) / 25, -1, 1);                 // >0 => oversold bias\nconst bbNorm  = clamp((0.5 - bbPos) / 0.35, -1, 1);            // >0 => nearer lower band\nconst macdNorm = clamp(macdHist * 10, -1, 1);                  // scale to reasonable range\nconst volGate = clamp(1 - (vol7d / 0.06), 0, 1);               // 0..1 (0 if very volatile)\n\n// Confidence-adjusted sentiment: reduces trading on weak LLM calls\nconst cas = sentiment * clamp(conf, 0, 1);\n\n// --- Hard risk guards (reduce drawdown) ---\nlet decision = \"hold\";\nlet reason = \"Filtered / neutral\";\nlet flags = [];\n\n// Emergency exits\nif (rsi >= 88) {\n  decision = \"sell\";\n  reason = \"Emergency exit: RSI extremely overbought\";\n  flags.push(\"rsi_emergency_sell\");\n  return [{ json: { date, ticker, price, decision, reason, score: -999, flags, debug: { sentiment, cas, conf, rsi, macdHist, bbPos, vol7d, impact, regRisk, adoption, volRisk, eventType } } }];\n}\n\nif (regRisk >= 0.85 && impact >= 0.5) {\n  decision = \"sell\";\n  reason = \"High regulatory risk with meaningful news impact\";\n  flags.push(\"reg_risk_sell\");\n  return [{ json: { date, ticker, price, decision, reason, score: -888, flags, debug: { sentiment, cas, conf, rsi, macdHist, bbPos, vol7d, impact, regRisk, adoption, volRisk, eventType } } }];\n}\n\n// Trade avoidance filters (reduce noisy trades)\nif (conf < 0.45) flags.push(\"low_confidence_hold\");\nif (impact < 0.25) flags.push(\"low_impact_hold\");              // tiny news => usually noise\nif (volRisk > 0.80) flags.push(\"llm_high_vol_hold\");\nif (vol7d > 0.06) flags.push(\"market_high_vol_hold\");          // adjust threshold if needed\n\nconst blocked = (conf < 0.45) || (impact < 0.25) || (volRisk > 0.80) || (vol7d > 0.06);\nif (blocked) {\n  decision = \"hold\";\n  reason = `Hold: ${flags.join(\", \")}`;\n  return [{ json: { date, ticker, price, decision, reason, score: 0, flags, debug: { sentiment, cas, conf, rsi, macdHist, bbPos, vol7d, impact, regRisk, adoption, volRisk, eventType } } }];\n}\n\n// --- Scoring model (hybrid: news + technical + risk penalties) ---\n// Positive components\nconst newsScore = (cas * 35) + (adoption * 18) + (impact * 12);\n\n// Technical components\nconst techScore = (rsiNorm * 14) + (macdNorm * 16) + (bbNorm * 10);\n\n// Risk penalties (pushes to hold / sell)\nconst riskPenalty = (regRisk * 30) + ((1 - volGate) * 12);\n\n// Event bias\nlet eventBias = 0;\nif (eventType === \"hack\") eventBias -= 18;\nif (eventType === \"regulation\") eventBias -= 10;\nif (eventType === \"adoption\" || eventType === \"partnership\") eventBias += 8;\nif (eventType === \"macro\") eventBias += 0;\n\n// Final score\nlet score = newsScore + techScore + eventBias - riskPenalty;\n\n// Mild “anti-chase” rule: don’t buy if already overbought or at top band\nif (rsi > 72) score -= 12;\nif (bbPos > 0.85) score -= 10;\n\n// Mild “dip-buy preference”: if oversold and sentiment not negative\nif (rsi < 35 && cas > -0.15) score += 8;\n\n// --- Decision thresholds (tuneable) ---\n// Higher buy threshold => fewer trades => often higher Sharpe\nconst BUY_TH = 28;\nconst SELL_TH = -18;\n\nif (score >= BUY_TH) {\n  decision = \"buy\";\n  reason = \"Score-based buy: aligned news+tech with acceptable risk\";\n} else if (score <= SELL_TH) {\n  decision = \"sell\";\n  reason = \"Score-based sell: negative or high-risk setup\";\n} else {\n  decision = \"hold\";\n  reason = \"Hold: score not strong enough\";\n}\n\n// Extra safety: if RSI high and score only slightly positive => hold\nif (decision === \"buy\" && rsi > 70 && score < (BUY_TH + 6)) {\n  decision = \"hold\";\n  reason = \"Hold: late entry risk (high RSI)\";\n  flags.push(\"late_entry_hold\");\n}\n\nreturn [{\n  json: {\n    date,\n    ticker,\n    price,\n    decision,\n    reason,\n    score: Number(score.toFixed(2)),\n    // Keep useful outputs for debugging/backtest inspection\n    llm: {\n      sentiment: Number(sentiment.toFixed(3)),\n      cas: Number(cas.toFixed(3)),\n      confidence: Number(conf.toFixed(3)),\n      impact: Number(impact.toFixed(3)),\n      regulatory_risk: Number(regRisk.toFixed(3)),\n      adoption_signal: Number(adoption.toFixed(3)),\n      volatility_risk: Number(volRisk.toFixed(3)),\n      event_type: eventType\n    },\n    tech: {\n      rsi: Number(rsi.toFixed(2)),\n      macd_hist: Number(macdHist.toFixed(5)),\n      bb_position: Number(bbPos.toFixed(3)),\n      volatility_7d: Number(vol7d.toFixed(5))\n    },\n    flags\n  }\n}];\n"
+      },
+      "id": "03c57b5d-e5a0-4316-aadb-e33ec7fcc53f",
+      "name": "🎯 MODIFY: Trading Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ========================================\n// ✅ Improved Trading Logic (Scoring + Risk Filters)\n// ========================================\n\nconst item = $input.first().json;\nconst analysis = item.analysis || {};\nconst indicators = item.indicators || {};\n\nconst date = item.date;\nconst ticker = item.ticker || indicators.ticker || \"N/A\";\nconst price = item.price || indicators.close || item.close || 0;\n\n// --- LLM signals (robust parsing) ---\nconst sentiment = Number(analysis.sentiment_score) || 0;        // -1..1\nconst impact = Number(analysis.news_impact) || 0;               // 0..1\nconst regRisk = Number(analysis.regulatory_risk) || 0;          // 0..1\nconst adoption = Number(analysis.adoption_signal) || 0;         // 0..1\nconst volRisk = Number(analysis.volatility_risk) || 0;          // 0..1\nconst conf = Number(analysis.confidence) || 0;                 // 0..1\nconst eventType = (analysis.event_type || \"neutral\").toLowerCase();\n\n// --- Technical indicators ---\nconst rsi = Number(indicators.rsi) || 50;\nconst macdHist = Number(indicators.macd_hist) || 0;\nconst bbPos = Number(indicators.bb_position) || 0.5;           // 0..1\nconst vol7d = Number(indicators.volatility_7d) || 0;           // daily vol proxy\n\n// --- Helpers ---\nconst clamp = (x, a, b) => Math.max(a, Math.min(b, x));\nconst sign = (x) => (x > 0 ? 1 : x < 0 ? -1 : 0);\n\n// Normalize some features into [-1..1] / [0..1]\nconst rsiNorm = clamp((50 - rsi) / 25, -1, 1);                 // >0 => oversold bias\nconst bbNorm  = clamp((0.5 - bbPos) / 0.35, -1, 1);            // >0 => nearer lower band\nconst macdNorm = clamp(macdHist * 10, -1, 1);                  // scale to reasonable range\nconst volGate = clamp(1 - (vol7d / 0.06), 0, 1);               // 0..1 (0 if very volatile)\n\n// Confidence-adjusted sentiment: reduces trading on weak LLM calls\nconst cas = sentiment * clamp(conf, 0, 1);\n\n// --- Hard risk guards (reduce drawdown) ---\nlet decision = \"hold\";\nlet reason = \"Filtered / neutral\";\nlet flags = [];\n\n// Emergency exits\nif (rsi >= 88) {\n  decision = \"sell\";\n  reason = \"Emergency exit: RSI extremely overbought\";\n  flags.push(\"rsi_emergency_sell\");\n  return [{ json: { date, ticker, price, decision, reason, score: -999, flags, debug: { sentiment, cas, conf, rsi, macdHist, bbPos, vol7d, impact, regRisk, adoption, volRisk, eventType } } }];\n}\n\nif (regRisk >= 0.85 && impact >= 0.5) {\n  decision = \"sell\";\n  reason = \"High regulatory risk with meaningful news impact\";\n  flags.push(\"reg_risk_sell\");\n  return [{ json: { date, ticker, price, decision, reason, score: -888, flags, debug: { sentiment, cas, conf, rsi, macdHist, bbPos, vol7d, impact, regRisk, adoption, volRisk, eventType } } }];\n}\n\n// Trade avoidance filters (reduce noisy trades)\nif (conf < 0.45) flags.push(\"low_confidence_hold\");\nif (impact < 0.25) flags.push(\"low_impact_hold\");              // tiny news => usually noise\nif (volRisk > 0.80) flags.push(\"llm_high_vol_hold\");\nif (vol7d > 0.06) flags.push(\"market_high_vol_hold\");          // adjust threshold if needed\n\nconst blocked = (conf < 0.45) || (impact < 0.25) || (volRisk > 0.80) || (vol7d > 0.06);\nif (blocked) {\n  decision = \"hold\";\n  reason = `Hold: ${flags.join(\", \")}`;\n  return [{ json: { date, ticker, price, decision, reason, score: 0, flags, debug: { sentiment, cas, conf, rsi, macdHist, bbPos, vol7d, impact, regRisk, adoption, volRisk, eventType } } }];\n}\n\n// --- Scoring model (hybrid: news + technical + risk penalties) ---\n// Positive components\nconst newsScore = (cas * 35) + (adoption * 18) + (impact * 12);\n\n// Technical components\nconst techScore = (rsiNorm * 14) + (macdNorm * 16) + (bbNorm * 10);\n\n// Risk penalties (pushes to hold / sell)\nconst riskPenalty = (regRisk * 30) + ((1 - volGate) * 12);\n\n// Event bias\nlet eventBias = 0;\nif (eventType === \"hack\") eventBias -= 18;\nif (eventType === \"regulation\") eventBias -= 10;\nif (eventType === \"adoption\" || eventType === \"partnership\") eventBias += 8;\nif (eventType === \"macro\") eventBias += 0;\n\n// Final score\nlet score = newsScore + techScore + eventBias - riskPenalty;\n\n// Mild “anti-chase” rule: don’t buy if already overbought or at top band\nif (rsi > 72) score -= 12;\nif (bbPos > 0.85) score -= 10;\n\n// Mild “dip-buy preference”: if oversold and sentiment not negative\nif (rsi < 35 && cas > -0.15) score += 8;\n\n// --- Decision thresholds (tuneable) ---\n// Higher buy threshold => fewer trades => often higher Sharpe\nconst BUY_TH = 28;\nconst SELL_TH = -18;\n\nif (score >= BUY_TH) {\n  decision = \"buy\";\n  reason = \"Score-based buy: aligned news+tech with acceptable risk\";\n} else if (score <= SELL_TH) {\n  decision = \"sell\";\n  reason = \"Score-based sell: negative or high-risk setup\";\n} else {\n  decision = \"hold\";\n  reason = \"Hold: score not strong enough\";\n}\n\n// Extra safety: if RSI high and score only slightly positive => hold\nif (decision === \"buy\" && rsi > 70 && score < (BUY_TH + 6)) {\n  decision = \"hold\";\n  reason = \"Hold: late entry risk (high RSI)\";\n  flags.push(\"late_entry_hold\");\n}\n\nreturn [{\n  json: {\n    date,\n    ticker,\n    price,\n    decision,\n    reason,\n    score: Number(score.toFixed(2)),\n    // Keep useful outputs for debugging/backtest inspection\n    llm: {\n      sentiment: Number(sentiment.toFixed(3)),\n      cas: Number(cas.toFixed(3)),\n      confidence: Number(conf.toFixed(3)),\n      impact: Number(impact.toFixed(3)),\n      regulatory_risk: Number(regRisk.toFixed(3)),\n      adoption_signal: Number(adoption.toFixed(3)),\n      volatility_risk: Number(volRisk.toFixed(3)),\n      event_type: eventType\n    },\n    tech: {\n      rsi: Number(rsi.toFixed(2)),\n      macd_hist: Number(macdHist.toFixed(5)),\n      bb_position: Number(bbPos.toFixed(3)),\n      volatility_7d: Number(vol7d.toFixed(5))\n    },\n    flags\n  }\n}];\n"
+      },
+      "id": "02b92546-7b41-4b4d-bb10-134789117dcd",
+      "name": "Export trades_log.csv",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        -112
+      ],
+      "notes": "Download CSV from execution output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Market Data (GitHub)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load News Data (GitHub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Market Data (GitHub)": {
+      "main": [
+        [
+          {
+            "node": "Parse Market CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load News Data (GitHub)": {
+      "main": [
+        [
+          {
+            "node": "Parse News CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Market CSV": {
+      "main": [
+        [
+          {
+            "node": "Merge Market + News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse News CSV": {
+      "main": [
+        [
+          {
+            "node": "Group News by Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group News by Date": {
+      "main": [
+        [
+          {
+            "node": "Merge Market + News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Market + News": {
+      "main": [
+        [
+          {
+            "node": "🎯 MODIFY: LLM Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎯 MODIFY: LLM Prompt": {
+      "main": [
+        [
+          {
+            "node": "Call Ollama LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Ollama LLM": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM Response": {
+      "main": [
+        [
+          {
+            "node": "🎯 MODIFY: Trading Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎯 MODIFY: Trading Logic": {
+      "main": [
+        [
+          {
+            "node": "Export trades_log.csv",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "1f30ea2e-c26d-46cd-9e8e-98b0eba8395c",
+  "meta": {
+    "instanceId": "a7354ce5b435fb1bbaf73b0af333e975e1d3ca6d48bd4b07cbbf50f627b20ee3"
+  },
+  "id": "28pJa6DZjYjnC1wx",
+  "tags": []
+}
